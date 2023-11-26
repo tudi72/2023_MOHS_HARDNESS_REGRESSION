@@ -9,7 +9,9 @@ import numpy as np
 
 seed = np.random.seed(578)
 
-def feature_engineering_pipeline(X,to_merge=None,ignore_outlier_features=None,outlier_col=None,std_features=None,std_method='zscore',kmeans_features=None,k_clusters=5):
+def feature_engineering_pipeline(X,to_merge=None,ignore_outlier_features=None,outlier_col=None,
+                                 std_features=None,std_method='zscore',kmeans_features=None,k_clusters=5,
+                                 new_column=None,to_merge_NN=None):
     try:
         pipeline_steps = []
 
@@ -24,6 +26,8 @@ def feature_engineering_pipeline(X,to_merge=None,ignore_outlier_features=None,ou
 
         if kmeans_features is not None:
             pipeline_steps.append(('kmeans feature',create_kmeans_features(kmeans_features,k_clusters)))
+        if to_merge_NN is not None:
+            pipeline_steps.append(('merge with NN values', merge_with_NN(new_column,to_merge_NN)))
 
         pip = Pipeline(steps=pipeline_steps)
         X = pip.fit_transform(X)
@@ -58,6 +62,33 @@ class merge_without_duplicates(BaseEstimator,TransformerMixin):
 
         except Exception as e: 
             print(f"[ERROR.feature_engineering.merge_without_duplicates]: ",e)
+
+class merge_with_NN(BaseEstimator,TransformerMixin):
+    def __init__(self,new_column=None,to_merge_NN=None):
+        self.new_column = new_column
+        self.to_merge_NN= to_merge_NN
+    
+    def fit(self, X):
+        return self 
+
+    def transform(self, X):
+        try:
+            if self.new_column not in self.to_merge_NN.columns:
+                raise Exception(f" column {self.new_column} not existent in dataset")
+            shared_features = [col for col in X.columns if col in self.to_merge_NN.columns]
+
+            x_train = X[shared_features]
+            to_merge_train = self.to_merge_NN[shared_features]
+
+            model = NearestNeighbors(n_neighbors=1, p=2)
+            model.fit(to_merge_train)
+            _, idx_df =  model.kneighbors(x_train)
+
+            X[self.new_column] = self.to_merge_NN.iloc[idx_df.flatten()][self.new_column].values
+            print(f"[INFO.feature_engineering.merge_with_NN]: Created {self.new_column} column with NN values from dataset")
+
+        except Exception as e:
+            print(f"[ERROR.feature_engineering.merge_with_column]: ",e)
 
 class add_outliers_col(BaseEstimator,TransformerMixin):
     
