@@ -37,9 +37,11 @@ def feature_engineering_pipeline(X,to_merge=None,ignore_outlier_features=None,ou
         if encode_columns is not None:
             pipeline_steps.append(('column encoder',column_encoder(encode_method,encode_columns)))
 
-        
-        pip = Pipeline(steps=pipeline_steps)
-        X = pip.fit_transform(X)
+        if len(pipeline_steps) == 0:
+            return X
+        else:
+            pip = Pipeline(steps=pipeline_steps)
+            X = pip.fit_transform(X)
 
         return X 
     except Exception as e:
@@ -91,7 +93,9 @@ class merge_with_NN(BaseEstimator,TransformerMixin):
         try:
             if self.new_column not in self.to_merge_NN.columns:
                 raise Exception(f" column {self.new_column} not existent in dataset")
-            shared_features = [col for col in X.columns if col in self.to_merge_NN.columns]
+            
+            ignore_features = ['id','Hardness']
+            shared_features = [col for col in X.columns if ((col in self.to_merge_NN.columns) and (col not in ignore_features))]
 
             x_train = X[shared_features]
             to_merge_train = self.to_merge_NN[shared_features]
@@ -178,7 +182,7 @@ class create_kmeans_features(BaseEstimator,TransformerMixin):
     def transform(self, X):
         try:
             
-            ignore_features = ['id','Hardness','is_original']
+            ignore_features = ['id','Hardness']
             features = [f for f in X.columns if f not in ignore_features]
 
             X_subset = X[features]
