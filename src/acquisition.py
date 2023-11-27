@@ -33,6 +33,8 @@ class read_csv_errorless(BaseEstimator,TransformerMixin):
     def transform(self, X):
         try:
             X = pd.read_csv(self.path)
+            print(f"[INFO.acquisition.read_csv_errorless]: Dataframe {X.shape} ...")
+
             return X
         except Exception as e:
             print(f"[ERROR.acquisition.read_csv_errorless]: ",e)
@@ -50,6 +52,8 @@ class add_fill_NA_column(BaseEstimator, TransformerMixin):
         try:
             if self.fill_NA_col in X.columns:
                 X[self.fill_NA_col] = X[self.fill_NA_col].fillna('not known')
+                print(f"[INFO.acquisition.add_fill_NA_col]: Dataframe {X.shape} ...")
+
             else: 
                 raise Exception(f"Column {self.fill_NA_col} not in dataframe")
             
@@ -69,6 +73,8 @@ class drop_redundant_cols(BaseEstimator, TransformerMixin):
         try:
             if self.drop_cols in X.columns:
                 X = X.drop(self.drop_cols, axis=1)
+                print(f"[INFO.acquisition.drop_redundant_cols]: Dataframe {X.shape} ...")
+
             else: 
                 raise Exception(f"column {self.drop_cols} not in dataframe")
             return X
