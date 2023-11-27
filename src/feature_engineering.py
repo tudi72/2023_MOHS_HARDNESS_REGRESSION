@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator,TransformerMixin
 from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler,MinMaxScaler,RobustScaler
+from sklearn.preprocessing import StandardScaler,MinMaxScaler,RobustScaler, LabelEncoder
 from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
 import numpy as np
@@ -10,8 +10,9 @@ import numpy as np
 seed = np.random.seed(578)
 
 def feature_engineering_pipeline(X,to_merge=None,ignore_outlier_features=None,outlier_col=None,
-                                 std_features=None,std_method='zscore',kmeans_features=None,k_clusters=5,
-                                 new_column=None,to_merge_NN=None):
+                                std_features=None,std_method='zscore',kmeans_features=None,k_clusters=5,
+                                new_column=None,to_merge_NN=None,n_neighbors=None,
+                                encode_method='label',encode_columns=None):
     try:
         pipeline_steps = []
 
@@ -27,10 +28,14 @@ def feature_engineering_pipeline(X,to_merge=None,ignore_outlier_features=None,ou
         if kmeans_features is not None:
             pipeline_steps.append(('kmeans feature',create_kmeans_features(kmeans_features,k_clusters)))
         if to_merge_NN is not None:
-            pipeline_steps.append(('merge with NN values', merge_with_NN(new_column,to_merge_NN)))
+            pipeline_steps.append(('merge with NN values', merge_with_NN(new_column,to_merge_NN,n_neighbors)))
 
+        if encode_columns is not None:
+            pipeline_steps.append(('column encoder',column_encoder(encode_method,encode_columns)))
+        
         pip = Pipeline(steps=pipeline_steps)
         X = pip.fit_transform(X)
+
         return X 
     except Exception as e:
         print(f"[ERROR.feature_engineering.feature_engineering_pipeline]: ",e)
@@ -45,16 +50,21 @@ class merge_without_duplicates(BaseEstimator,TransformerMixin):
     
     def transform(self, X):
         try:
-            X = pd.concat([X,self.to_merge]).reset_index(drop=True)
-
+            X = pd.concat([X,self.to_merge])
+            X.reset_index(drop=True,inplace=True)
+            
             X_duplicates = X[X.duplicated()]
             if not X_duplicates.empty:
-            
+                
+                # entirely duplicated rows 
                 counts = len(X_duplicates)
                 X = X.drop_duplicates()
-                X = X.reset_index(drop=True)
+                X.reset_index(drop=True,inplace=True)
 
                 print(f"[INFO.feature_engineering.merge_without_duplicates]: Found {counts} duplicates")
+            
+            
+            
             else:
                 print(f"[INFO.feature_engineering.merge_without_duplicates]: No duplicates")
 
@@ -64,9 +74,10 @@ class merge_without_duplicates(BaseEstimator,TransformerMixin):
             print(f"[ERROR.feature_engineering.merge_without_duplicates]: ",e)
 
 class merge_with_NN(BaseEstimator,TransformerMixin):
-    def __init__(self,new_column=None,to_merge_NN=None):
+    def __init__(self,new_column=None,to_merge_NN=None,n_neighbors=1):
         self.new_column = new_column
         self.to_merge_NN= to_merge_NN
+        self.n_neighbors= n_neighbors
     
     def fit(self, X):
         return self 
@@ -80,16 +91,19 @@ class merge_with_NN(BaseEstimator,TransformerMixin):
             x_train = X[shared_features]
             to_merge_train = self.to_merge_NN[shared_features]
 
-            model = NearestNeighbors(n_neighbors=1, p=2)
+            model = NearestNeighbors(n_neighbors=1)
             model.fit(to_merge_train)
             _, idx_df =  model.kneighbors(x_train)
 
             X[self.new_column] = self.to_merge_NN.iloc[idx_df.flatten()][self.new_column].values
+            
             print(f"[INFO.feature_engineering.merge_with_NN]: Created {self.new_column} column with NN values from dataset")
+            return X
 
         except Exception as e:
             print(f"[ERROR.feature_engineering.merge_with_column]: ",e)
-
+            return None 
+        
 class add_outliers_col(BaseEstimator,TransformerMixin):
     
     def __init__(self,ignore_features=None,outlier_col=None):
@@ -167,7 +181,7 @@ class create_kmeans_features(BaseEstimator,TransformerMixin):
 
             for i, center in enumerate(kmeans.cluster_centers_):
                 X[f'dist_to_center_{i}'] = ((X_subset - center) ** 2).sum(axis=1) ** 0.5
-
+            
             print(f"[INFO.feature_engineering.create_kmeans_features]: Created {self.k_clusters} cluster cols")    
             return X
         
@@ -175,7 +189,33 @@ class create_kmeans_features(BaseEstimator,TransformerMixin):
             print(f"[ERROR.feature_engineering.create_kmeans_features]: ",e)
             return None
 
+class column_encoder(BaseEstimator,TransformerMixin):
+    def __init__(self,method='label',columns=None):
+        self.method = method 
+        self.columns = columns
 
+        if method == 'label':
+            self.encoder = LabelEncoder()
+        else:
+            self.encoder = None
+    
+    def fit(self, X):
+        return self 
+    
+    def transform(self, X):
+        try:
+            
+            for column in self.columns:
+                if column not in X.columns:
+                    raise Exception(f" column {column} not existent")
+
+                X[column] = self.encoder.fit_transform(X[column])
+                
+
+            return X
+        except Exception as e:
+            print(f"[ERROR.feature_engineering.categoric_encoder]: ",e)
+            return None    
 
 
 
